@@ -14,7 +14,7 @@ import path from 'path'
 
 dotenv.config()
 
-// 🧠 Función para leer texto en consola
+// 🧠 Lectura desde consola
 const ask = (query) =>
   new Promise((resolve) => {
     const rl = readline.createInterface({
@@ -31,34 +31,48 @@ const ask = (query) =>
 const loadModules = async (dir) => {
   const modules = {}
   const folder = path.join(process.cwd(), dir)
-  if (!fs.existsSync(folder)) return modules
+  if (!fs.existsSync(folder)) {
+    console.log(chalk.red(`⚠️ Carpeta no encontrada: ${dir}`))
+    return modules
+  }
 
+  console.log(chalk.blueBright(`🔍 Cargando módulos desde: ${dir}`))
   for (const file of fs.readdirSync(folder)) {
     if (file.endsWith('.js')) {
-      const mod = await import(path.join('file://', folder, file))
-      modules[file.replace('.js', '')] = mod.default || mod
+      try {
+        const mod = await import(path.join('file://', folder, file))
+        modules[file.replace('.js', '')] = mod.default || mod
+        console.log(chalk.green(`✅ Módulo cargado: ${file}`))
+      } catch (err) {
+        console.log(chalk.red(`❌ Error al cargar ${file}:`), err.message)
+      }
     }
   }
   return modules
 }
 
-// 🚀 Función principal del bot
-const startBot = async () => {
+// ⚙️ Reconexión automática con espera
+const delay = (ms) => new Promise((res) => setTimeout(res, ms))
+
+// 🚀 Función principal
+async function startBot(auto = false) {
   const { state, saveCreds } = await useMultiFileAuthState('./session')
   const { version } = await fetchLatestBaileysVersion()
 
-  // 📚 Cargar módulos
+  if (!auto) {
+    console.clear()
+    console.log(chalk.magentaBright('╭━━━〔 𝙆𝘼𝙉𝙀𝙆𝙄 𝙑𝙀𝙉𝙏𝘼𝙎 🗿 〕━━⬣'))
+    console.log(chalk.cyan('┃ 🚀 Bot iniciado'))
+    console.log(chalk.cyan('┃ 📦 Cargando módulos y comandos...'))
+    console.log(chalk.magentaBright('╰━━━━━━━━━━━━━━━━━━━━━━⬣\n'))
+  }
+
   const catalogos = await loadModules('./catalogos')
   const plugins = await loadModules('./plugins')
   const comandos = await loadModules('./comandos')
 
-  console.clear()
-  console.log(chalk.magentaBright('╭━━━〔 𝙆𝘼𝙉𝙀𝙆𝙄 𝙑𝙀𝙉𝙏𝘼𝙎 🗿 〕━━⬣'))
-  console.log(chalk.cyan('┃ 1️⃣ Conectar con código QR'))
-  console.log(chalk.cyan('┃ 2️⃣ Conectar con código de 8 dígitos'))
-  console.log(chalk.magentaBright('╰━━━━━━━━━━━━━━━━━━━━━━⬣\n'))
-
-  const choice = await ask(chalk.green('👉 Elige el método de conexión (1 o 2): '))
+  console.log(chalk.greenBright('\n✅ Módulos cargados correctamente.'))
+  console.log(chalk.yellowBright('----------------------------------------------'))
 
   const sock = makeWASocket({
     version,
@@ -68,58 +82,41 @@ const startBot = async () => {
     syncFullHistory: false
   })
 
-  // 🔗 Conexión por QR
-  if (choice === '1') {
-    sock.ev.on('connection.update', (update) => {
-      const { connection, lastDisconnect, qr } = update
-      if (qr) {
-        console.log(chalk.green('\n📱 Escanea este código QR para vincular tu WhatsApp:\n'))
-        qrcode.generate(qr, { small: true })
-      }
-      if (connection === 'open') {
-        console.log(chalk.cyan('\n✅ Conectado correctamente a WhatsApp.'))
-        console.log('📅 Sesión iniciada:', moment().format('DD/MM/YYYY HH:mm:ss'))
-      }
-      if (connection === 'close') {
-        const reason = lastDisconnect?.error?.output?.statusCode
-        if (reason === DisconnectReason.loggedOut) {
-          console.log(chalk.red('⚠️ Sesión cerrada, borra la carpeta /session y vuelve a conectar.'))
-        } else {
-          console.log(chalk.yellow('♻️ Reconectando...'))
-          startBot()
-        }
-      }
-    })
-  }
+  // 🟢 Evento de conexión
+  sock.ev.on('connection.update', async (update) => {
+    const { connection, lastDisconnect, qr } = update
 
-  // 🔢 Conexión por código de 8 dígitos
-  if (choice === '2') {
-    let phone
-    while (true) {
-      phone = await ask(chalk.yellow('\n📞 Ingresa tu número (ejemplo: 51987654321): '))
-      if (!/^\d{10,15}$/.test(phone)) {
-        console.log(chalk.red('❌ Número inválido.'))
-        continue
-      }
-      break
+    if (qr) {
+      console.log(chalk.green('\n📱 Escanea este código QR para vincular tu WhatsApp:\n'))
+      qrcode.generate(qr, { small: true })
     }
 
-    console.log(chalk.blue('\n🔄 Generando código...'))
-    try {
-      const code = await sock.requestPairingCode(phone)
-      if (code) {
-        console.log(chalk.greenBright(`✅ Código generado para +${phone}`))
-        console.log(chalk.magentaBright(`🔢 Tu código es: ${code}`))
-        console.log(chalk.cyanBright('\n📲 WhatsApp → Dispositivos vinculados → Vincular con código'))
-      }
-    } catch (e) {
-      console.error(chalk.red('❌ Error al generar el código:'), e)
+    if (connection === 'connecting') {
+      console.log(chalk.yellowBright(`[${moment().format('HH:mm:ss')}] 🔄 Conectando a WhatsApp...`))
     }
-  }
+
+    if (connection === 'open') {
+      console.log(chalk.greenBright(`\n✅ Conectado correctamente a WhatsApp`))
+      console.log(chalk.cyanBright(`📅 Sesión iniciada: ${moment().format('DD/MM/YYYY HH:mm:ss')}`))
+    }
+
+    if (connection === 'close') {
+      const reason = lastDisconnect?.error?.output?.statusCode || 'desconocido'
+      console.log(chalk.red(`⚠️ Conexión cerrada (${reason})`))
+
+      if (reason === DisconnectReason.loggedOut) {
+        console.log(chalk.red('🧹 La sesión fue cerrada. Borra /session y vuelve a vincular.'))
+      } else {
+        console.log(chalk.yellow('♻️ Intentando reconectar automáticamente en 5 segundos...'))
+        await delay(5000)
+        startBot(true) // 🔁 Reconexión automática
+      }
+    }
+  })
 
   sock.ev.on('creds.update', saveCreds)
 
-  // 💬 Registro de mensajes y ejecución modular
+  // 💬 Registro de mensajes
   sock.ev.on('messages.upsert', async ({ messages }) => {
     const m = messages[0]
     if (!m.message) return
@@ -135,53 +132,52 @@ const startBot = async () => {
 
     if (!text) return
 
-    // 🧾 Mostrar en consola
-    console.log(
-      chalk.yellow(`[📩 MENSAJE] ${moment().format('HH:mm:ss')} - ${sender}:`),
-      chalk.white(text)
-    )
+    const hora = moment().format('HH:mm:ss')
+    console.log(chalk.yellow(`\n[${hora}] 💬 ${sender}:`), chalk.white(text))
 
-    // 🧩 Ejecutar plugins simples
+    // 🔩 Plugins automáticos
     for (const name in plugins) {
       const plugin = plugins[name]
       if (plugin && typeof plugin === 'function') {
-        await plugin(sock, m, text)
+        try {
+          await plugin(sock, m, text)
+        } catch (err) {
+          console.log(chalk.red(`❌ Error en plugin "${name}":`), err.message)
+        }
       }
     }
 
-    // ⚙️ Ejecutar comandos (prefijo “!”)
+    // ⚙️ Comandos (prefijo !)
     if (text.startsWith('!')) {
       const [cmd, ...args] = text.slice(1).split(' ')
       const comando = comandos[cmd]
       if (comando && typeof comando === 'function') {
+        console.log(chalk.cyan(`🧠 Ejecutando comando: !${cmd}`))
         await comando(sock, m, args)
         return
+      } else {
+        console.log(chalk.red(`❌ Comando no encontrado: !${cmd}`))
       }
     }
 
     // 🛍️ Menú principal
-    if (text.toLowerCase() === 'menu') {
-      if (catalogos.menuPrincipal) {
-        const data = catalogos.menuPrincipal()
-        await sock.sendMessage(sender, data)
-      } else {
-        await sock.sendMessage(sender, { text: '⚠️ No se encontró el catálogo principal.' })
-      }
-    }
-    if (text.toLowerCase() === 'nose') {
-      if (plugins.zapatillas) {
-        const data = plugins.zapatillas()
-        await sock.sendMessage(sender, data)
-      } else {
-        await sock.sendMessage(sender, { text: '⚠️ No se encontró el catálogo principal.' })
-      }
+    if (text.toLowerCase() === 'menu' && catalogos.menuPrincipal) {
+      console.log(chalk.blue('📦 Enviando menú principal...'))
+      const data = catalogos.menuPrincipal()
+      await sock.sendMessage(sender, data)
     }
 
-    // 🧩 Botones del catálogo (responden automáticamente)
-    if (text === 'ropa' && plugins.ropa) await plugins.ropa(sock, m, text)
-    if (text === 'zapatillas' && plugins.zapatillas) await plugins.zapatillas(sock, m, text)
-    if (text === 'accesorios' && plugins.accesorios) await plugins.accesorios(sock, m, text)
+    // 🧩 Botones de catálogo
+    if (text.toLowerCase() === 'ropa' && plugins.ropa) await plugins.ropa(sock, m, text)
+    if (text.toLowerCase() === 'zapatillas' && plugins.zapatillas) await plugins.zapatillas(sock, m, text)
+    if (text.toLowerCase() === 'accesorios' && plugins.accesorios) await plugins.accesorios(sock, m, text)
   })
 }
 
-startBot()
+// 🟢 Iniciar con autoconexión si hay sesión guardada
+if (fs.existsSync('./session/creds.json')) {
+  console.log(chalk.cyanBright('🔁 Sesión detectada, conectando automáticamente...'))
+  startBot(true)
+} else {
+  startBot()
+}
