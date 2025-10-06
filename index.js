@@ -168,6 +168,14 @@ const startBot = async () => {
         await sock.sendMessage(sender, { text: '⚠️ No se encontró el catálogo principal.' })
       }
     }
+    if (text.toLowerCase() === 'nose') {
+      if (plugins.zapatillas) {
+        const data = plugins.zapatillas()
+        await sock.sendMessage(sender, data)
+      } else {
+        await sock.sendMessage(sender, { text: '⚠️ No se encontró el catálogo principal.' })
+      }
+    }
 
     // 🧩 Botones del catálogo (responden automáticamente)
     if (text === 'ropa' && plugins.ropa) await plugins.ropa(sock, m, text)
