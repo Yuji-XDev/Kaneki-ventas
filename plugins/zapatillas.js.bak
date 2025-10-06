@@ -16,4 +16,5 @@ export default async function zapatillas(sock, m, text) {
     footer: '🖤 Estilo y comodidad con Kaneki',
   }
 
+  await sock.sendMessage(m.key.remoteJid, mensaje)
 }
