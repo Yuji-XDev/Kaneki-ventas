@@ -1,9 +1,8 @@
-// index.js
 import {
   makeWASocket,
   useMultiFileAuthState,
   DisconnectReason,
-  fetchLatestBaileysVersion,
+  fetchLatestBaileysVersion
 } from '@whiskeysockets/baileys'
 import qrcode from 'qrcode-terminal'
 import chalk from 'chalk'
@@ -13,18 +12,20 @@ import dotenv from 'dotenv'
 
 dotenv.config()
 
-// Función para leer input del usuario desde la consola
-const ask = (query) => new Promise((resolve) => {
-  const rl = readline.createInterface({
-    input: process.stdin,
-    output: process.stdout,
+// Función para leer texto en consola
+const ask = (query) =>
+  new Promise((resolve) => {
+    const rl = readline.createInterface({
+      input: process.stdin,
+      output: process.stdout
+    })
+    rl.question(query, (ans) => {
+      rl.close()
+      resolve(ans.trim())
+    })
   })
-  rl.question(query, (ans) => {
-    rl.close()
-    resolve(ans)
-  })
-})
 
+// Función principal
 const startBot = async () => {
   const { state, saveCreds } = await useMultiFileAuthState('./session')
   const { version } = await fetchLatestBaileysVersion()
@@ -39,14 +40,16 @@ const startBot = async () => {
 
   const choice = await ask(chalk.green('👉 Elige el método de conexión (1 o 2): '))
 
+  // ⚙️ Configurar socket sin QR impreso automático
   const sock = makeWASocket({
     version,
     auth: state,
     printQRInTerminal: false,
     browser: ['Kaneki Ventas', 'Chrome', '1.0.0'],
+    syncFullHistory: false
   })
 
-  // Si elige QR normal
+  // 🧩 Opción 1: Conexión por código QR
   if (choice === '1') {
     sock.ev.on('connection.update', (update) => {
       const { connection, lastDisconnect, qr } = update
@@ -73,38 +76,47 @@ const startBot = async () => {
     })
   }
 
-  // Si elige código de 8 dígitos
+  // 🧩 Opción 2: Conexión por código de 8 dígitos
   if (choice === '2') {
     const phone = await ask(chalk.yellow('\n📞 Ingresa tu número de WhatsApp (ejemplo: 51987654321): '))
 
     console.log(chalk.blue('\n🔄 Generando código de vinculación...'))
 
     try {
+      // 👇 IMPORTANTE: No debe tener sesión previa activa
       const code = await sock.requestPairingCode(phone)
       console.log(chalk.greenBright(`\n🔢 Tu código de vinculación es: ${code}`))
-      console.log(chalk.cyanBright('\n📲 En tu WhatsApp ve a: Dispositivos vinculados → Vincular con código\n'))
+      console.log(chalk.cyanBright('\n📲 En tu WhatsApp ve a: Dispositivos vinculados → Vincular con código'))
+      console.log(chalk.yellow('⌛ El código expira en unos minutos, úsalo pronto.'))
     } catch (e) {
-      console.log(chalk.red('❌ Error al generar el código de vinculación:'), e)
+      console.error(chalk.red('\n❌ Error al generar el código de vinculación:'))
+      console.error(e)
+      console.log(chalk.yellow('\n💡 Solución rápida: borra la carpeta /session y vuelve a intentarlo.'))
     }
   }
 
+  // 🔐 Guardar credenciales
   sock.ev.on('creds.update', saveCreds)
 
-  // 📦 Respuestas automáticas básicas
+  // 💬 Respuestas automáticas básicas
   sock.ev.on('messages.upsert', async ({ messages }) => {
     const m = messages[0]
     if (!m.message) return
-    const texto = (m.message.conversation || m.message.extendedTextMessage?.text || '').toLowerCase()
+
+    const texto =
+      (m.message.conversation ||
+        m.message.extendedTextMessage?.text ||
+        '').toLowerCase()
 
     if (texto.includes('hola')) {
       await sock.sendMessage(m.key.remoteJid, {
-        text: '👋 ¡Hola! Bienvenido a *Kaneki Ventas* 🛒\nEscribe *menu* para ver nuestros productos.',
+        text: '👋 ¡Hola! Bienvenido a *Kaneki Ventas* 🛒\nEscribe *menu* para ver nuestros productos.'
       })
     }
 
     if (texto.includes('menu')) {
       await sock.sendMessage(m.key.remoteJid, {
-        text: '🛍️ *Catálogo disponible:*\n1️⃣ Camisas\n2️⃣ Zapatillas\n3️⃣ Accesorios\n\nEscribe el número para más info.',
+        text: '🛍️ *Catálogo disponible:*\n1️⃣ Camisas\n2️⃣ Zapatillas\n3️⃣ Accesorios\n\nEscribe el número para más info.'
       })
     }
   })
