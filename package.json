@@ -6,7 +6,8 @@
   "type": "module",
   "scripts": {
     "start": "node index.js",
-    "dev": "nodemon index.js"
+    "dev": "nodemon index.js",
+    "update": "git pull && npm install && echo '✅ Bot actualizado. Reinicia el bot para aplicar cambios.'"
   },
   "keywords": [
     "whatsapp",

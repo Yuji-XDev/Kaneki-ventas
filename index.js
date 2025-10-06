@@ -15,7 +15,6 @@ import path from 'path'
 
 dotenv.config()
 
-// 🧠 Función para leer desde consola
 const ask = (query) =>
   new Promise((resolve) => {
     const rl = readline.createInterface({
@@ -28,7 +27,6 @@ const ask = (query) =>
     })
   })
 
-// 📦 Carga dinámica de módulos
 const loadModules = async (dir) => {
   const modules = {}
   const folder = path.join(process.cwd(), dir)
@@ -54,7 +52,6 @@ const loadModules = async (dir) => {
 
 const delay = (ms) => new Promise((res) => setTimeout(res, ms))
 
-// 🔁 Conversión de LIDs (IDs nuevos de WhatsApp)
 async function resolveLidToRealJid(lidJid, conn, maxRetries = 3, retryDelay = 1000) {
   if (!lidJid?.includes('@lid')) return lidJid
   for (let i = 0; i < maxRetries; i++) {
@@ -68,7 +65,6 @@ async function resolveLidToRealJid(lidJid, conn, maxRetries = 3, retryDelay = 10
   return lidJid
 }
 
-// 🚀 Función principal
 async function startBot(auto = false) {
   const { state, saveCreds } = await useMultiFileAuthState('./session')
   const { version } = await fetchLatestBaileysVersion()
@@ -150,7 +146,6 @@ async function startBot(auto = false) {
     const hora = moment().format('HH:mm:ss')
     console.log(chalk.yellow(`\n[${hora}] 💬 ${sender}:`), chalk.white(text))
 
-    // 🔩 Plugins automáticos
     for (const name in plugins) {
       const plugin = plugins[name]
       if (plugin && typeof plugin === 'function') {
@@ -162,7 +157,7 @@ async function startBot(auto = false) {
       }
     }
 
-    // ⚙️ Comandos (prefijo !)
+    // ⚙️ Comandos
     if (text.startsWith('!')) {
       const [cmd, ...args] = text.slice(1).split(' ')
       const comando = comandos[cmd]
@@ -175,7 +170,22 @@ async function startBot(auto = false) {
       }
     }
 
-    // 🛍️ Menú principal
+    // 🔄 Comando !update
+    if (text.toLowerCase() === 'update') {
+      await sock.sendMessage(sender, { text: '♻️ Actualizando bot desde Git...' })
+      const { exec } = await import('child_process')
+      exec('git pull', (err, stdout, stderr) => {
+        if (err) {
+          console.log(chalk.red('❌ Error al actualizar:'), err.message)
+          sock.sendMessage(sender, { text: `❌ Error al actualizar:\n${err.message}` })
+          return
+        }
+        const output = stdout || stderr || '✅ Bot actualizado correctamente.'
+        console.log(chalk.greenBright('✅ Git Pull ejecutado'))
+        sock.sendMessage(sender, { text: `📦 Resultado de la actualización:\n\n${output}` })
+      })
+    }
+
     if (text.toLowerCase() === 'menu' && catalogos.menuPrincipal) {
       console.log(chalk.blue('📦 Enviando menú principal...'))
       const data = catalogos.menuPrincipal()
@@ -190,7 +200,6 @@ async function startBot(auto = false) {
   return sock
 }
 
-// 🧷 Iniciar flujo según modo de conexión
 if (fs.existsSync('./session/creds.json')) {
   console.log(chalk.cyanBright('🔁 Sesión detectada, conectando automáticamente...'))
   startBot(true)
@@ -223,7 +232,6 @@ if (fs.existsSync('./session/creds.json')) {
     console.log(chalk.greenBright(`✅ Tu código de vinculación es: ${code}`))
     console.log(chalk.cyanBright('\n📱 Abre WhatsApp > Dispositivos vinculados > Vincular dispositivo > Ingresa el código.'))
 
-    // 🔔 Esperar a que la conexión esté abierta para enviar la notificación
     sock.ev.on('connection.update', async (update) => {
       const { connection } = update
       if (connection === 'open') {
