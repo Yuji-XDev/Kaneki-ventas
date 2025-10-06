@@ -2,7 +2,8 @@ import {
   makeWASocket,
   useMultiFileAuthState,
   DisconnectReason,
-  fetchLatestBaileysVersion
+  fetchLatestBaileysVersion,
+  jidNormalizedUser
 } from '@whiskeysockets/baileys'
 import qrcode from 'qrcode-terminal'
 import chalk from 'chalk'
@@ -14,7 +15,7 @@ import path from 'path'
 
 dotenv.config()
 
-// 🧠 Lectura desde consola
+// 🧠 Función para leer desde consola
 const ask = (query) =>
   new Promise((resolve) => {
     const rl = readline.createInterface({
@@ -51,8 +52,21 @@ const loadModules = async (dir) => {
   return modules
 }
 
-// ⚙️ Reconexión automática con espera
 const delay = (ms) => new Promise((res) => setTimeout(res, ms))
+
+// 🔁 Conversión de LIDs (IDs nuevos de WhatsApp)
+async function resolveLidToRealJid(lidJid, conn, maxRetries = 3, retryDelay = 1000) {
+  if (!lidJid?.includes('@lid')) return lidJid
+  for (let i = 0; i < maxRetries; i++) {
+    try {
+      const result = await conn.onWhatsApp(lidJid)
+      if (result?.[0]?.jid) return result[0].jid
+    } catch {
+      if (i < maxRetries - 1) await delay(retryDelay)
+    }
+  }
+  return lidJid
+}
 
 // 🚀 Función principal
 async function startBot(auto = false) {
@@ -82,7 +96,6 @@ async function startBot(auto = false) {
     syncFullHistory: false
   })
 
-  // 🟢 Evento de conexión
   sock.ev.on('connection.update', async (update) => {
     const { connection, lastDisconnect, qr } = update
 
@@ -96,8 +109,11 @@ async function startBot(auto = false) {
     }
 
     if (connection === 'open') {
+      const userJid = jidNormalizedUser(sock.user?.id)
+      const userName = sock.user?.name || sock.user?.verifiedName || 'Desconocido'
       console.log(chalk.greenBright(`\n✅ Conectado correctamente a WhatsApp`))
       console.log(chalk.cyanBright(`📅 Sesión iniciada: ${moment().format('DD/MM/YYYY HH:mm:ss')}`))
+      console.log(chalk.greenBright(`👤 Usuario: ${userName} (${userJid})`))
     }
 
     if (connection === 'close') {
@@ -109,19 +125,19 @@ async function startBot(auto = false) {
       } else {
         console.log(chalk.yellow('♻️ Intentando reconectar automáticamente en 5 segundos...'))
         await delay(5000)
-        startBot(true) // 🔁 Reconexión automática
+        startBot(true)
       }
     }
   })
 
   sock.ev.on('creds.update', saveCreds)
 
-  // 💬 Registro de mensajes
+  // 💬 Manejo de mensajes
   sock.ev.on('messages.upsert', async ({ messages }) => {
     const m = messages[0]
     if (!m.message) return
 
-    const sender = m.key.remoteJid
+    const sender = await resolveLidToRealJid(m.key.remoteJid, sock)
     const text =
       (
         m.message.conversation ||
@@ -131,7 +147,6 @@ async function startBot(auto = false) {
       ).trim()
 
     if (!text) return
-
     const hora = moment().format('HH:mm:ss')
     console.log(chalk.yellow(`\n[${hora}] 💬 ${sender}:`), chalk.white(text))
 
@@ -167,17 +182,59 @@ async function startBot(auto = false) {
       await sock.sendMessage(sender, data)
     }
 
-    // 🧩 Botones de catálogo
     if (text.toLowerCase() === 'ropa' && plugins.ropa) await plugins.ropa(sock, m, text)
     if (text.toLowerCase() === 'zapatillas' && plugins.zapatillas) await plugins.zapatillas(sock, m, text)
     if (text.toLowerCase() === 'accesorios' && plugins.accesorios) await plugins.accesorios(sock, m, text)
   })
+
+  return sock
 }
 
-// 🟢 Iniciar con autoconexión si hay sesión guardada
+// 🧷 Iniciar flujo según modo de conexión
 if (fs.existsSync('./session/creds.json')) {
   console.log(chalk.cyanBright('🔁 Sesión detectada, conectando automáticamente...'))
   startBot(true)
 } else {
-  startBot()
+  console.clear()
+  console.log(chalk.magentaBright('╭━━━〔 𝙆𝘼𝙉𝙀𝙆𝙄 𝙑𝙀𝙉𝙏𝘼𝙎 🗿 〕━━⬣'))
+  console.log(chalk.cyan('┃ 🔗 No hay sesión activa'))
+  console.log(chalk.cyan('┃ 1️⃣ Vincular con código QR'))
+  console.log(chalk.cyan('┃ 2️⃣ Vincular con código de 8 dígitos'))
+  console.log(chalk.magentaBright('╰━━━━━━━━━━━━━━━━━━━━━━⬣\n'))
+
+  const choice = await ask('👉 Elige el método de vinculación (1 o 2): ')
+
+  if (choice === '2') {
+    const { state, saveCreds } = await useMultiFileAuthState('./session')
+    const { version } = await fetchLatestBaileysVersion()
+    const sock = makeWASocket({
+      version,
+      auth: state,
+      printQRInTerminal: false,
+      browser: ['Kaneki Ventas', 'Chrome', '1.0.0']
+    })
+
+    const phoneNumber = await ask('📞 Ingresa tu número de WhatsApp con código de país (sin +): ')
+    console.log(chalk.yellow('\n⌛ Generando código de vinculación...'))
+
+    let code = await sock.requestPairingCode(`+${phoneNumber}`)
+    code = code?.match(/.{1,4}/g)?.join('-') || code
+
+    console.log(chalk.greenBright(`✅ Tu código de vinculación es: ${code}`))
+    console.log(chalk.cyanBright('\n📱 Abre WhatsApp > Dispositivos vinculados > Vincular dispositivo > Ingresa el código.'))
+
+    // 🔔 Enviar notificación directa al número vinculado
+    try {
+      await sock.sendMessage(`${phoneNumber}@s.whatsapp.net`, {
+        text: `🌸 Hola! Tu código de vinculación con *Kaneki Ventas* es:\n\n🔢 *${code}*\n\nÚsalo en WhatsApp > Dispositivos vinculados para conectar tu cuenta.`
+      })
+      console.log(chalk.greenBright('📩 Notificación enviada correctamente al número vinculado.'))
+    } catch {
+      console.log(chalk.red('⚠️ No se pudo enviar el mensaje de notificación al número.'))
+    }
+
+    sock.ev.on('creds.update', saveCreds)
+  } else {
+    startBot()
+  }
 }
