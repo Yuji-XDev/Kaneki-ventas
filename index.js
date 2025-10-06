@@ -196,7 +196,7 @@ if (fs.existsSync('./session/creds.json')) {
   startBot(true)
 } else {
   console.clear()
-  console.log(chalk.magentaBright('╭━━━〔 𝙆𝘼𝙉𝙀𝙆𝙄 𝙑𝙀𝙉𝙏𝘼𝙎 🗿 〕━━⬣'))
+  console.log(chalk.magentaBright('╭━━━〔 🕸️ 𝙆𝘼𝙉𝙀𝙆𝙄 𝙑𝙀𝙉𝙏𝘼𝙎 🗿 〕━━⬣'))
   console.log(chalk.cyan('┃ 🔗 No hay sesión activa'))
   console.log(chalk.cyan('┃ 1️⃣ Vincular con código QR'))
   console.log(chalk.cyan('┃ 2️⃣ Vincular con código de 8 dígitos'))
@@ -223,15 +223,20 @@ if (fs.existsSync('./session/creds.json')) {
     console.log(chalk.greenBright(`✅ Tu código de vinculación es: ${code}`))
     console.log(chalk.cyanBright('\n📱 Abre WhatsApp > Dispositivos vinculados > Vincular dispositivo > Ingresa el código.'))
 
-    // 🔔 Enviar notificación directa al número vinculado
-    try {
-      await sock.sendMessage(`${phoneNumber}@s.whatsapp.net`, {
-        text: `🌸 Hola! Tu código de vinculación con *Kaneki Ventas* es:\n\n🔢 *${code}*\n\nÚsalo en WhatsApp > Dispositivos vinculados para conectar tu cuenta.`
-      })
-      console.log(chalk.greenBright('📩 Notificación enviada correctamente al número vinculado.'))
-    } catch {
-      console.log(chalk.red('⚠️ No se pudo enviar el mensaje de notificación al número.'))
-    }
+    // 🔔 Esperar a que la conexión esté abierta para enviar la notificación
+    sock.ev.on('connection.update', async (update) => {
+      const { connection } = update
+      if (connection === 'open') {
+        try {
+          await sock.sendMessage(`${phoneNumber}@s.whatsapp.net`, {
+            text: `🌸 Hola! Tu código de vinculación con *Kaneki Ventas* es:\n\n🔢 *${code}*\n\nÚsalo en WhatsApp > Dispositivos vinculados para conectar tu cuenta.`
+          })
+          console.log(chalk.greenBright('📩 Notificación enviada correctamente al número vinculado.'))
+        } catch {
+          console.log(chalk.red('⚠️ No se pudo enviar el mensaje de notificación al número.'))
+        }
+      }
+    })
 
     sock.ev.on('creds.update', saveCreds)
   } else {
