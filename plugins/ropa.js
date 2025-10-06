@@ -1,20 +1,25 @@
-export default async function ropa(sock, m, text) {
-  if (text.toLowerCase() !== 'ropa') return
+let handler = async (m, { conn, text }) => {
+  // Detecta si el usuario escribió o presionó "ropa"
+  const userMsg = (text || m.text || '').toLowerCase()
+  if (!userMsg.includes('ropa')) return
 
   const mensaje = {
     image: { url: 'https://n.uguu.se/vqJnHBPm.jpg' },
     caption: `
-🧥 *Catálogo de Ropa - Kaneki Ventas* 👕  
-
-👚 Polos desde *S/ 29.90*  
-👖 Jeans desde *S/ 59.90*  
-🧢 Gorras desde *S/ 19.90*
-
-📦 Envíos a todo el Perú 🇵🇪  
-🛒 Escribe *comprar ropa* para hacer tu pedido.
+╭━━━〔 👕 *CATÁLOGO DE ROPA* 〕━━⬣
+│ 👚 *Polos:* desde _S/ 29.90_
+│ 👖 *Jeans:* desde _S/ 59.90_
+│ 🧢 *Gorras:* desde _S/ 19.90_
+│
+│ 📦 Envíos a todo el Perú 🇵🇪
+│ 🛒 Escribe *comprar ropa* para hacer tu pedido.
+╰━━━━━━━━━━━━━━━━━━⬣
     `,
     footer: '✨ Calidad Kaneki garantizada',
   }
 
-  await sock.sendMessage(m.key.remoteJid, mensaje)
+  await conn.sendMessage(m.chat, mensaje)
 }
+
+handler.command = /^(ropa)$/i
+export default handler
